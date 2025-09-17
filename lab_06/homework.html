@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Lab 06 - Jakub Worek</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+  <link type="text/css" rel="stylesheet" href="main.css">
+</head>
+
+<body>
+  <div id="info">
+    Kula się kręci a ludzie tańczą!
+  </div>
+  <script src="./build/three.js"></script>
+  <script src="./js/libs/stats.min.js"></script>
+  <script src="./js/controls/OrbitControls.js"></script>
+  <script src="./js/libs/inflate.min.js"></script>
+  <script src="./js/loaders/FBXLoader.js"></script>
+  <script type="module">
+    var container, stats, controls;
+    var camera, scene, renderer, light;
+
+    var clock = new THREE.Clock();
+
+    var mixers = [];
+    var discoBall;
+
+    init();
+    animate();
+
+    function init() {
+      const rotateAroundVector = (object, axis, angle) => {
+        const rotObjectMatrix = new THREE.Matrix4();
+        rotObjectMatrix.makeRotationAxis(axis.normalize(), angle);
+        object.matrix.multiply(rotObjectMatrix);
+        object.rotation.setFromRotationMatrix(object.matrix);
+      };
+
+      container = document.createElement('div');
+      document.body.appendChild(container);
+
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 2000);
+      camera.position.set(-150, 200, -350);
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x000000); // Czarne tło dla nocnej sceny
+      scene.fog = new THREE.Fog(0x000000, 500, 1000); // Ciemna mgła
+
+      light = new THREE.HemisphereLight(0x444444, 0x111122); // Przyciemnione światło hemisferyczne
+      light.position.set(0, 200, 0);
+      scene.add(light);
+
+      light = new THREE.DirectionalLight(0xffffff, 0.5); // Przyciemnione światło kierunkowe
+      light.position.set(0, 200, 100);
+      light.castShadow = true;
+      light.shadow.camera.top = 180;
+      light.shadow.camera.bottom = -100;
+      light.shadow.camera.left = -120;
+      light.shadow.camera.right = 120;
+      scene.add(light);
+
+      // Dodanie reflektorów
+      var spotLight = new THREE.SpotLight(0xffffff, 1);
+      spotLight.position.set(0, 200, 200);
+      spotLight.angle = Math.PI / 4;
+      spotLight.penumbra = 0.1;
+      spotLight.decay = 2;
+      spotLight.distance = 500;
+      spotLight.castShadow = true;
+      scene.add(spotLight);
+
+      // var spotLightHelper = new THREE.SpotLightHelper(spotLight);
+      // scene.add(spotLightHelper);
+
+      // ground
+      var mesh = new THREE.Mesh(new THREE.PlaneBufferGeometry(2000, 2000), new THREE.MeshPhongMaterial({ color: 0xff0000, depthWrite: false }));
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+
+      var grid = new THREE.GridHelper(2000, 20, 0x000000, 0x000000);
+      grid.material.opacity = 0.2;
+      grid.material.transparent = true;
+      scene.add(grid);
+
+      // model
+      var loader = new THREE.FBXLoader();
+      var positions = [-250, -125, 0, 125, 250]; // Pozycje tancerzy w linii
+
+      positions.forEach(function (position) {
+        loader.load('models/fbx/Dancing Twerk.fbx', function (object) {
+
+          var mixer = new THREE.AnimationMixer(object);
+          mixers.push(mixer);
+
+          var action = mixer.clipAction(object.animations[0]);
+          action.play();
+
+          object.traverse(function (child) {
+
+            if (child.isMesh) {
+
+              child.castShadow = true;
+              child.receiveShadow = true;
+
+            }
+
+          });
+
+          object.position.set(position, 0, 0); // Ustawienie pozycji tancerza
+          scene.add(object);
+
+        });
+      });
+
+      // Dodanie disco ball
+      const COLORS = {
+        white: 0xffffff,
+        black: 0x000000,
+        gray: 0x9f9f9e,
+        silver: 0xc0c0c0,
+        orange: 0xff5f00,
+        red: 0xff004d,
+        green: 0x69e700,
+        blue: 0x06d8ff,
+        yellow: 0xffd300,
+      };
+
+      const MATERIALS = {
+        phong: {
+          white: new THREE.MeshPhongMaterial({
+            color: COLORS.white,
+            side: THREE.DoubleSide,
+          }),
+          silver: new THREE.MeshPhongMaterial({
+            color: COLORS.silver,
+            shininess: 100,
+            specular: true,
+          }),
+          red: new THREE.MeshPhongMaterial({
+            color: COLORS.red,
+            shininess: 100,
+            specular: true,
+          }),
+          green: new THREE.MeshPhongMaterial({
+            color: COLORS.green,
+            shininess: 100,
+            specular: true,
+          }),
+          blue: new THREE.MeshPhongMaterial({
+            color: COLORS.blue,
+            shininess: 100,
+            specular: true,
+          }),
+        },
+        line: {
+          gray: new THREE.LineBasicMaterial({
+            color: COLORS.gray,
+            linewidth: 2,
+          }),
+        },
+      };
+
+      class DiscoBall extends THREE.Group {
+        constructor(colors, lightRaysCount, lightAngle = 0.1) {
+          super();
+          this.count = lightRaysCount;
+          this.colors = colors;
+          this.targets = this.#createTargets();
+          this.spotlights = this.#createSpotlights(lightAngle);
+          this.ball = this.#createBall();
+        }
+
+        #createTargets() {
+          const positions = DiscoBall.distributePointsOnSphere(this.count);
+          this.targetGroup = new THREE.Group();
+          const targets = positions.map(({ x, y, z }) => {
+            const target = new THREE.Object3D();
+            target.position.set(x, y, z);
+            this.targetGroup.add(target);
+            return target;
+          });
+          this.add(this.targetGroup);
+          return targets;
+        }
+
+        #createSpotlights(lightAngle) {
+          this.spotlightGroup = new THREE.Group();
+          const spotlights = this.targets.map((target, i) => {
+            const color = this.colors[i % this.colors.length];
+            const spotlight = new Spotlight(color, 0.75, lightAngle);
+            spotlight.showCone(color, 0.25, 50);
+            spotlight.target = target;
+            this.spotlightGroup.add(spotlight);
+            return spotlight;
+          });
+          this.spotlightGroup.position.set(0, -1, 0);
+          this.add(this.spotlightGroup);
+          return spotlights;
+        }
+
+        #createBall() {
+          const geometry = new THREE.DodecahedronGeometry(1, 1);
+          const ball = new THREE.Group();
+          ball.add(new THREE.Mesh(geometry, MATERIALS.phong.silver));
+          const edgesGeometry = new THREE.EdgesGeometry(geometry);
+          ball.add(new THREE.LineSegments(edgesGeometry, MATERIALS.line.gray));
+          this.add(ball);
+          return ball;
+        }
+
+        static distributePointsOnSphere(samples) {
+          const positions = [];
+
+          for (let i = 0; i < samples; i++) {
+            const num = 0.5 + i;
+            const phi = Math.acos(1 - (2 * num) / samples);
+            const theta = Math.PI * (1 + 5 ** 0.5) * num;
+            positions.push(
+              new THREE.Vector3(
+                Math.cos(theta) * Math.sin(phi),
+                Math.sin(theta) * Math.sin(phi),
+                Math.cos(phi)
+              )
+            );
+          }
+
+          return positions;
+        }
+      }
+
+      class Spotlight extends THREE.Group {
+        #target = new THREE.Object3D();
+
+        constructor(color, opacity = 1, angle = 0.1) {
+          super();
+          this.#createSpotlight(color, opacity, angle);
+        }
+
+        get target() {
+          return this.#target;
+        }
+
+        set target(target) {
+          if (this.#target?.type === "Object3D") scene.remove(this.#target);
+          this.#target = target;
+          this.spotlight.target = target;
+          if (this.coneGroup) this.#updateConeRotation();
+        }
+
+        lookAt(vector) {
+          if (this.#target?.type !== "Object3D") {
+            this.target = new THREE.Object3D();
+            scene.add(this.target);
+          }
+          this.#target.position.set(vector.x, vector.y, vector.z);
+          if (this.coneGroup) this.#updateConeRotation(vector);
+        }
+
+        showHelper() {
+          scene.add(new THREE.SpotLightHelper(this.spotlight));
+        }
+
+        showCone(color, opacity, height, segments = 25) {
+          const coneGroup = (this.coneGroup = new THREE.Group());
+          const radius = 0.9 * height * Math.tan(this.spotlight.angle);
+          const cone = (this.cone = new THREE.Mesh(
+            new THREE.ConeGeometry(radius, height, segments, 1, true),
+            new THREE.MeshLambertMaterial({
+              opacity,
+              color,
+              transparent: true,
+            })
+          ));
+          const { x, y, z } = this.spotlight.position;
+          cone.position.set(x, -height / 2, z);
+          coneGroup.position.set(x, y, z);
+          coneGroup.add(cone);
+          this.add(coneGroup);
+        }
+
+        #createSpotlight(color, opacity, angle) {
+          const spotlight = (this.spotlight = new THREE.SpotLight(
+            color,
+            opacity
+          ));
+          spotlight.angle = angle;
+          spotlight.penumbra = 0.7;
+          spotlight.shadow.camera.near = 0.1;
+          spotlight.shadow.camera.far = 100;
+          spotlight.shadow.camera.fov = 60;
+          spotlight.shadow.mapSize.width = 4096;
+          spotlight.shadow.mapSize.height = 4096;
+          spotlight.shadow.radius = 40;
+          spotlight.shadow.blurSamples = 200;
+          spotlight.castShadow = true;
+          spotlight.shadow.camera.left = -100;
+          spotlight.shadow.camera.right = 100;
+          spotlight.shadow.camera.top = 100;
+          spotlight.shadow.camera.bottom = -100;
+
+          this.add(spotlight);
+        }
+
+        #updateConeRotation() {
+          const { x, y, z } = this.#target.position;
+          const vector = new THREE.Vector3(x, y, z).cross(
+            new THREE.Vector3(0, 1, 0)
+          );
+          let angle =
+            (Math.atan(-Math.sqrt(x ** 2 + z ** 2) / y) + Math.PI) % Math.PI;
+          rotateAroundVector(this.coneGroup, vector, angle);
+        }
+      }
+
+      discoBall = new DiscoBall(
+        [COLORS.blue, COLORS.orange, COLORS.yellow, COLORS.red, COLORS.green],
+        10
+      );
+      discoBall.position.set(0, 250, 0);
+      discoBall.scale.set(10, 10, 10); // Powiększenie kuli disco
+      scene.add(discoBall);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      container.appendChild(renderer.domElement);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.target.set(0, 100, 0);
+      controls.update();
+
+      window.addEventListener('resize', onWindowResize, false);
+
+      // stats
+      stats = new Stats();
+      container.appendChild(stats.dom);
+
+    }
+
+    function onWindowResize() {
+
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+
+      renderer.setSize(window.innerWidth, window.innerHeight);
+
+    }
+
+    //
+
+    function animate() {
+
+      requestAnimationFrame(animate);
+
+      var delta = clock.getDelta();
+
+      mixers.forEach(function (mixer) {
+        mixer.update(delta);
+      });
+
+      // Animacja kuli disco
+      if (discoBall) {
+        discoBall.rotation.y += 0.01; // Obracanie kuli disco
+        discoBall.spotlights.forEach((spotlight, index) => {
+          const angle = 0.01 * (index + 1); // Zmniejszenie wartości kąta
+          spotlight.lookAt(new THREE.Vector3(
+            50 * Math.cos(angle * 1),
+            50 * Math.sin(angle * 1),
+            0
+          ));
+        });
+      }
+
+      renderer.render(scene, camera);
+
+      stats.update();
+
+    }
+
+  </script>
+
+</body>
+</html>

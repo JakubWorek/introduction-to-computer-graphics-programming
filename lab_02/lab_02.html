@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+    <title>Lab 02 - Jakub Worek</title>
+    <script type="text/javascript" src="three.js"></script>
+    <script type="text/javascript" src="jquery-1.9.0.js"></script>
+    <script type="text/javascript" src="stats.js"></script>
+    <script type="text/javascript" src="dat.gui.js"></script>
+	<script type="text/javascript" src="OrbitControls.js"></script>
+    <style>
+        body {
+            /* set margin to 0 and overflow to hidden, to go fullscreen */
+            margin: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+
+<div id="Stats-output">
+</div>
+<!-- Div which will hold the Output -->
+<div id="WebGL-output">
+</div>
+
+<!-- Javascript code that runs our Three.js examples -->
+<script type="text/javascript">
+    var stats = initStats();
+
+    // create a scene, that will hold all our elements such as objects, cameras and lights.
+    var scene = new THREE.Scene();
+
+    // create a camera, which defines where we're looking at.
+    var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+
+    // create a render and set the size
+    var renderer = new THREE.WebGLRenderer();
+
+    renderer.setClearColor(new THREE.Color(0x0f0f0f));  //background color and opacity
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;   // false is default
+    renderer.autoClear = true;          // default
+    renderer.autoClearColor = true;     // default
+    
+    ctr = new THREE.OrbitControls( camera, renderer.domElement);
+
+    // create the ground plane
+    var planeGeometry = new THREE.PlaneGeometry(60, 20, 15, 5);
+    var planeMaterial = new THREE.MeshPhongMaterial({color: 0xffffff, side:THREE.DoubleSide});
+    var plane = new THREE.Mesh(planeGeometry, planeMaterial);
+    plane.receiveShadow = true;
+
+    // rotate and position the plane
+    plane.rotation.x = -0.5 * Math.PI;
+    plane.position.x = 15
+    plane.position.y = 0
+    plane.position.z = 0
+
+    // add the plane to the scene
+    scene.add(plane);
+
+    // create a cube
+    var cubeGeometry = new THREE.CubeGeometry(4, 4, 4);
+    var cubeMaterial = new THREE.MeshPhongMaterial({color: 0xff0000, specular:true, shininess:100});
+    var cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+    cube.castShadow = true;
+
+    // position the cube
+    cube.position.x = -4;
+    cube.position.y = 3;
+    cube.position.z = 0;
+
+    // add the cube to the scene
+    scene.add(cube);
+
+    // another cube
+    var cubeGeometry1 = new THREE.CubeGeometry(4, 4, 4);
+    var cubeMaterial = new THREE.MeshPhongMaterial({color: 0x00ff00, specular:true, shininess:100});
+    var cube1 = new THREE.Mesh(cubeGeometry1, cubeMaterial);
+    cube1.castShadow = true;
+
+    // position the cube
+    cube1.position.x = 20;
+    cube1.position.y = 3;
+    cube1.position.z = 2;
+
+    // add the cube to the scene
+    scene.add(cube1);
+
+    var sphereGeometry = new THREE.SphereGeometry(4, 20, 20);
+    var sphereMaterial = new THREE.MeshPhongMaterial({color: 0x7777ff, specular:true, shininess:100});
+    var sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+
+    // position the sphere
+    sphere.position.x = 20;
+    sphere.position.y = 0;
+    sphere.position.z = 2;
+    sphere.castShadow = true;
+
+    // add the sphere to the scene
+    scene.add(sphere);
+
+    // position and point the camera to the center of the scene
+    camera.position.x = -25;
+    camera.position.y = 30;
+    camera.position.z = 25;
+    camera.lookAt(new THREE.Vector3(10, 0, 0));
+
+    // add subtle ambient lighting
+    var ambiColor = "#2e2e2e";
+    var ambientLight = new THREE.AmbientLight(ambiColor);
+    scene.add(ambientLight);
+
+    var spotLightGroup = new THREE.Group();
+
+    // add spotlight for the shadows
+    var spotLight = new THREE.SpotLight(0xffffff);
+    spotLight.position.set(-40, 60, -10);
+    spotLight.castShadow = true;
+
+    spotLight.angle = 0.25;
+    spotLight.penumbra = .7;
+    spotLight.target = sphere;
+    // var helper = new THREE.CameraHelper( spotLight.shadow.camera );
+    // scene.add( helper );
+    spotLight.shadow.camera.near = 0.1;
+    spotLight.shadow.camera.far = 100;
+    spotLight.shadow.camera.fov = 60;
+    spotLight.shadow.mapSize.width = 2048;
+    spotLight.shadow.mapSize.height = 2048;
+
+
+    spotLightGroup.add(spotLight);
+
+    const coneGroup = new THREE.Group();
+    const coneGeometry = new THREE.ConeGeometry(15, 100, 40);
+    const coneMaterial = new THREE.MeshLambertMaterial({
+        opacity: 0.6,
+        color: 0x44ff44,
+        transparent: true,
+    });
+    const cone = new THREE.Mesh(coneGeometry, coneMaterial);
+    cone.position.set(0, -50, 0);
+    coneGroup.add(cone);
+    coneGroup.position.set(-40, 60, -10);
+
+    spotLightGroup.add(coneGroup);
+
+    scene.add(spotLightGroup);
+
+    const rotateAroundVector = (object, axis, angle) => {
+        rotObjectMatrix = new THREE.Matrix4();
+        rotObjectMatrix.makeRotationAxis(axis.normalize(), angle);
+        object.matrix.multiply(rotObjectMatrix);
+        object.rotation.setFromRotationMatrix(object.matrix);
+    };
+
+    class Spotlight extends THREE.Group {
+        #target = new THREE.Object3D();
+
+        constructor(color, opacity = 1, angle = 0.1) {
+            super();
+            this.#createSpotlight(color, opacity, angle);
+        }
+
+        get target() {
+            return this.#target;
+        }
+
+        set target(target) {
+            if (this.#target?.type === "Object3D") scene.remove(this.#target);
+            this.#target = target;
+            this.spotlight.target = target;
+            if (this.coneGroup) this.#updateConeRotation();
+        }
+
+        lookAt(vector) {
+            if (this.#target?.type !== "Object3D") {
+                this.target = new THREE.Object3D();
+                scene.add(this.target);
+            }
+            this.#target.position.set(vector.x, vector.y, vector.z);
+            if (this.coneGroup) this.#updateConeRotation(vector);
+        }
+
+        showHelper() {
+            scene.add(new THREE.SpotLightHelper(this.spotlight));
+        }
+
+        showCone(color, opacity, height, segments = 25) {
+            const coneGroup = (this.coneGroup = new THREE.Group());
+            const radius = 0.9 * height * Math.tan(this.spotlight.angle);
+            const cone = (this.cone = new THREE.Mesh(
+                new THREE.ConeGeometry(radius, height, segments, 1, true),
+                new THREE.MeshLambertMaterial({
+                opacity,
+                color,
+                transparent: true,
+                })
+            ));
+            const { x, y, z } = this.spotlight.position;
+            cone.position.set(x, -height / 2, z);
+            coneGroup.position.set(x, y, z);
+            coneGroup.add(cone);
+            this.add(coneGroup);
+        }
+
+        #createSpotlight(color, opacity, angle) {
+            const spotlight = (this.spotlight = new THREE.SpotLight(
+                color,
+                opacity
+            ));
+            spotlight.angle = angle;
+            spotlight.penumbra = 0.7;
+            spotlight.shadow.camera.near = 0.1;
+            spotlight.shadow.camera.far = 100;
+            spotlight.shadow.camera.fov = 60;
+            spotlight.shadow.mapSize.width = 4096;
+            spotlight.shadow.mapSize.height = 4096;
+            spotlight.shadow.radius = 40;
+            spotlight.shadow.blurSamples = 200;
+            spotlight.castShadow = true;
+            spotlight.shadow.camera.left = -100;
+            spotlight.shadow.camera.right = 100;
+            spotlight.shadow.camera.top = 100;
+            spotlight.shadow.camera.bottom = -100;
+
+            this.add(spotlight);
+        }
+
+        #updateConeRotation() {
+            const { x, y, z } = this.#target.position;
+            const vector = new THREE.Vector3(x, y, z).cross(
+                new THREE.Vector3(0, 1, 0)
+            );
+            let angle =
+                (Math.atan(-Math.sqrt(x ** 2 + z ** 2) / y) + Math.PI) % Math.PI;
+            rotateAroundVector(this.coneGroup, vector, angle);
+        }
+    }
+
+    class DiscoBall extends THREE.Group {
+        constructor(colors, lightRaysCount, lightAngle = 0.1) {
+            super();
+            this.count = lightRaysCount;
+            this.colors = colors;
+            this.targets = this.#createTargets();
+            this.spotlights = this.#createSpotlights(lightAngle);
+            this.ball = this.#createBall();
+        }
+
+        #createTargets() {
+            const positions = DiscoBall.distributePointsOnSphere(this.count);
+            this.targetGroup = new THREE.Group();
+            const targets = positions.map(({ x, y, z }) => {
+                const target = new THREE.Object3D();
+                target.position.set(x, y, z);
+                this.targetGroup.add(target);
+                return target;
+            });
+            this.add(this.targetGroup);
+            return targets;
+        }
+
+        #createSpotlights(lightAngle) {
+            this.spotlightGroup = new THREE.Group();
+            const spotlights = this.targets.map((target, i) => {
+                const color = this.colors[i % this.colors.length];
+                const spotlight = new Spotlight(color, 0.75, lightAngle);
+                spotlight.showCone(color, 0.25, 50);
+                spotlight.target = target;
+                this.spotlightGroup.add(spotlight);
+                return spotlight;
+            });
+            this.spotlightGroup.position.set(0, -1, 0);
+            this.add(this.spotlightGroup);
+            return spotlights;
+        }
+
+        #createBall() {
+            const geometry = new THREE.DodecahedronGeometry(1, 1);
+            const ball = new THREE.Group();
+            ball.add(new THREE.Mesh(geometry, MATERIALS.phong.silver));
+            const edgesGeometry = new THREE.EdgesGeometry(geometry);
+            ball.add(new THREE.LineSegments(edgesGeometry, MATERIALS.line.gray));
+            this.add(ball);
+            return ball;
+        }
+
+        static distributePointsOnSphere(samples) {
+            const positions = [];
+
+            for (let i = 0; i < samples; i++) {
+                const num = 0.5 + i;
+                const phi = Math.acos(1 - (2 * num) / samples);
+                const theta = Math.PI * (1 + 5 ** 0.5) * num;
+                positions.push(
+                new THREE.Vector3(
+                    Math.cos(theta) * Math.sin(phi),
+                    Math.sin(theta) * Math.sin(phi),
+                    Math.cos(phi)
+                )
+                );
+            }
+
+            return positions;
+        }
+    }
+
+    const COLORS = {
+        white: 0xffffff,
+        black: 0x000000,
+        gray: 0x9f9f9e,
+        silver: 0xc0c0c0,
+        orange: 0xff5f00,
+        red: 0xff004d,
+        green: 0x69e700,
+        blue: 0x06d8ff,
+        yellow: 0xffd300,
+    };
+
+    const MATERIALS = {
+        phong: {
+          white: new THREE.MeshPhongMaterial({
+            color: COLORS.white,
+            side: THREE.DoubleSide,
+          }),
+          silver: new THREE.MeshPhongMaterial({
+            color: COLORS.silver,
+            shininess: 100,
+            specular: true,
+          }),
+          red: new THREE.MeshPhongMaterial({
+            color: COLORS.red,
+            shininess: 100,
+            specular: true,
+          }),
+          green: new THREE.MeshPhongMaterial({
+            color: COLORS.green,
+            shininess: 100,
+            specular: true,
+          }),
+          blue: new THREE.MeshPhongMaterial({
+            color: COLORS.blue,
+            shininess: 100,
+            specular: true,
+          }),
+        },
+        line: {
+          gray: new THREE.LineBasicMaterial({
+            color: COLORS.gray,
+            linewidth: 2,
+          }),
+        },
+      };
+
+    const discoBall = new DiscoBall(
+        [COLORS.blue, COLORS.orange, COLORS.yellow, COLORS.red, COLORS.green],
+        10
+    );
+    discoBall.position.set(0, 15, 0);
+    scene.add(discoBall);
+
+    const rotateDiscoBall = () => {
+        let speedX = 0.05;
+        let speedY = 0.025;
+        let speedZ = 0.025;
+        let directionX = -1;
+        let directionY = 1;
+        let directionZ = -1;
+        const step = 0.001;
+
+        return () => {
+            speedX += directionX * step;
+            if (speedX <= 0.02 || speedX >= 0.05) directionX *= -1;
+            speedY += directionY * step;
+            if (speedY <= 0.02 || speedY >= 0.1) directionY *= -1;
+            speedZ += directionZ * step;
+            if (speedZ <= 0.02 || speedZ >= 0.05) directionZ *= -1;
+            if (Math.random() < 0.005 && speedX > 0.025) directionX *= -1;
+            if (Math.random() < 0.005 && speedY > 0.05) directionY *= -1;
+            if (Math.random() < 0.005 && speedZ > 0.025) directionZ *= -1;
+            discoBall.rotateX(speedX);
+            discoBall.rotateY(speedY);
+            discoBall.rotateZ(speedZ);
+        };
+    };
+
+    // add the output of the renderer to the html element
+    $("#WebGL-output").append(renderer.domElement);
+
+    // call the render function
+    var step = 0;
+
+    var controls = new function () {
+        this.rotationSpeed = 0.02;
+        this.bouncingSpeed = 0.03;
+        this.ambientColor = ambiColor;
+    }
+
+    var gui = new dat.GUI();
+    gui.addColor(controls, 'ambientColor').onChange(function (e) {
+        ambientLight.color = new THREE.Color(e);
+    });
+
+
+    render();
+
+    function calcRotation(dw, dh) {
+        return Math.atan(dw / dh);
+    }
+
+    function updateConePosition() {
+        const { x, y, z } = spotLight.position;
+        coneGroup.position.set(x, y, z);
+        const targetPos = spotLight.target.position;
+        coneGroup.rotation.z = -calcRotation(x - targetPos.x, y - targetPos.y);
+        coneGroup.rotation.x = calcRotation(z - targetPos.z, y - targetPos.y);
+    }
+
+    updateConePosition();
+
+    function render() {
+        stats.update();
+        // rotate the cube around its axes
+        cube.rotation.x += controls.rotationSpeed;
+        cube.rotation.y += controls.rotationSpeed;
+        cube.rotation.z += controls.rotationSpeed;
+
+        cube1.rotation.y += controls.rotationSpeed;
+
+        // bounce the sphere up and down
+        step += controls.bouncingSpeed;
+        sphere.position.x = 20 + ( 10 * (Math.cos(step)));
+        sphere.position.y = 2 + ( 10 * Math.abs(Math.sin(step)));
+
+        // update position of cone and spotlight
+        spotLight.position.x = 50 * Math.cos(step / 4);
+        spotLight.position.z = 50 * Math.sin(step / 4);
+        updateConePosition();
+        rotateDiscoBall()();
+        // render using requestAnimationFrame
+        requestAnimationFrame(render);
+        renderer.render(scene, camera);
+    }
+
+    function initStats() {
+        var stats = new Stats();
+
+        stats.setMode(0); // 0: fps, 1: ms
+
+        // Align top-left
+        stats.domElement.style.position = 'absolute';
+        stats.domElement.style.left = '0px';
+        stats.domElement.style.top = '0px';
+
+        $("#Stats-output").append(stats.domElement);
+
+        return stats;
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lab 05 - Jakub Worek</title>
+  <link rel="stylesheet" href="/css/main.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/16.3.5/Tween.min.js"></script>
+</head>
+<body>
+  <div class="viewport"></div>
+  <script src="three.min.js"></script>
+  <script src="physi.js"></script>
+  
+  <script>
+    var container, scene, renderer, camera, light, ball, plane;
+    var WIDTH, HEIGHT, VIEW_ANGLE, ASPECT, NEAR, FAR;
+    var ground, ground_material;
+    var bumper1, bumper2, bumper3, bumper4;
+
+    var clock = new THREE.Clock();
+
+    Physijs.scripts.worker = 'physijs_worker.js';
+    Physijs.scripts.ammo = 'ammo.js';
+
+    container = document.querySelector('.viewport');
+
+    WIDTH = window.innerWidth,
+    HEIGHT = window.innerHeight;
+
+    VIEW_ANGLE = 60,
+    ASPECT = WIDTH / HEIGHT,
+    NEAR = 1,
+    FAR = 10000;
+
+    scene = new Physijs.Scene();
+    scene.setGravity(new THREE.Vector3( 0, -50, 0 ));
+    scene.addEventListener('update', function() {
+      scene.simulate(undefined, 2);
+    });
+
+    renderer = new THREE.WebGLRenderer({
+      antialias: true
+    });
+
+    renderer.setSize(WIDTH, HEIGHT);
+    renderer.shadowMapEnabled = true;
+    renderer.shadowMapSoft = true;
+    renderer.shadowMapType = THREE.PCFShadowMap;
+    renderer.shadowMapAutoUpdate = true;
+
+    container.appendChild(renderer.domElement);
+
+    camera = new THREE.PerspectiveCamera(VIEW_ANGLE, ASPECT, NEAR, FAR);
+
+    camera.position.set(60, 60, 250);
+    camera.lookAt(scene.position);
+    scene.add(camera);
+
+    light = new THREE.DirectionalLight(0xffffff);
+
+    light.position.set(0, 100, 60);
+    light.castShadow = true;
+    light.shadowCameraLeft = -60;
+    light.shadowCameraTop = -60;
+    light.shadowCameraRight = 60;
+    light.shadowCameraBottom = 60;
+    light.shadowCameraNear = 1;
+    light.shadowCameraFar = 1000;
+    light.shadowBias = -.0001
+    light.shadowMapWidth = light.shadowMapHeight = 1024;
+    light.shadowDarkness = .7;
+
+    scene.add(light);
+
+    plane = new Physijs.BoxMesh(
+      new THREE.CubeGeometry(100, 100, 2, 10, 10),
+      Physijs.createMaterial(
+        new THREE.MeshLambertMaterial({
+          color: 0xeeeeee
+        }),
+        .4,
+        .99
+      ),
+      0
+    );
+
+    plane.rotation.x = -Math.PI / 2;
+    plane.rotation.y = Math.PI / 24;
+    plane.receiveShadow = true;
+
+    scene.add(plane);
+
+
+    plane2 = new Physijs.BoxMesh(
+      new THREE.CubeGeometry(100, 100, 2, 10, 10),
+      Physijs.createMaterial(
+        new THREE.MeshLambertMaterial({
+          color: 0xeeeeee
+        }),
+        .4,
+        .99
+      ),
+      0
+    );
+
+    plane2.rotation.x = -Math.PI / 2;
+    plane2.rotation.y = -Math.PI / 5;
+    plane2.position.y = -40;
+    plane2.position.x = 50;
+    plane2.receiveShadow = true;
+
+    scene.add(plane2);
+
+    // Materials
+		ground_material = Physijs.createMaterial(
+			new THREE.MeshLambertMaterial({
+          color: 0xeeeeee
+        }),
+			.4, // high friction
+			.99 // low restitution
+		);
+
+		// Ground
+		ground = new Physijs.BoxMesh(
+			new THREE.CubeGeometry(100, 1, 100),
+			ground_material,
+			0 // mass
+		);
+		ground.receiveShadow = true;
+    ground.position.x = -50;
+    ground.position.y = -100;
+		scene.add( ground );
+		
+		// Bumpers
+		var bumper,
+			bumper_geom = new THREE.CubeGeometry(2, 10, 100);
+		
+		bumper1 = new Physijs.BoxMesh( bumper_geom, ground_material, 0, { restitution: .2 } );
+		bumper1.position.y = -99;
+		bumper1.position.x = -99;
+		bumper1.receiveShadow = true;
+		bumper1.castShadow = true;
+		scene.add( bumper1 );
+		
+		bumper2 = new Physijs.BoxMesh( bumper_geom, ground_material, 0, { restitution: .2 } );
+		bumper2.position.y = -99;
+		bumper2.position.x = -1;
+		bumper2.receiveShadow = true;
+		bumper2.castShadow = true;
+		scene.add( bumper2 );
+		
+		bumper3 = new Physijs.BoxMesh( bumper_geom, ground_material, 0, { restitution: .2 } );
+		bumper3.position.y = -99;
+		bumper3.position.z = -49;
+    bumper3.position.x = -50;
+		bumper3.rotation.y = Math.PI / 2;
+		bumper3.receiveShadow = true;
+		bumper3.castShadow = true;
+		scene.add( bumper3 );
+		
+		bumper4 = new Physijs.BoxMesh( bumper_geom, ground_material, 0, { restitution: .2 } );
+		bumper4.position.y = -99;
+		bumper4.position.z = 49;
+    bumper4.position.x = -50;
+		bumper4.rotation.y = Math.PI / 2;
+		bumper4.receiveShadow = true;
+		bumper4.castShadow = true;
+		scene.add( bumper4 );
+
+    setInterval(function() {
+      ball = new Physijs.SphereMesh(
+        new THREE.SphereGeometry(
+          Math.random() * (4 - 1) + 1,
+          16,
+          16
+        ),
+        Physijs.createMaterial(
+          new THREE.MeshLambertMaterial({
+            color: randomColor(),
+            reflectivity: .8
+          }),
+          .4,
+          .99
+        ),
+        1
+      );
+
+      var r = {
+        x: Math.random() * (Math.PI - Math.PI / 12) + Math.PI / 12,
+        y: Math.random() * (Math.PI - Math.PI / 12) + Math.PI / 12,
+        z: Math.random() * (Math.PI - Math.PI / 12) + Math.PI / 12
+      };
+
+      ball.rotation.set(r.x, r.y, r.z);
+      ball.position.y = 40;
+      ball.castShadow = true;
+      ball.receiveShadow = true;
+
+      scene.add(ball);
+    }, 600);
+
+    function moveContainer(up) {
+      var duration = 10; // Czas trwania animacji w milisekundach
+
+      // Docelowe pozycje
+      var targetPositionY = up ? ground.position.y + 10 : ground.position.y - 10;
+
+      // Animacja ground
+      new TWEEN.Tween(ground.position)
+        .to({ y: targetPositionY }, duration)
+        .easing(TWEEN.Easing.Linear.None)
+        .onUpdate(function() {
+          ground.__dirtyPosition = true;
+        })
+        .start();
+
+      // Animacja bumper1
+      new TWEEN.Tween(bumper1.position)
+        .to({ y: targetPositionY + 1 }, duration)
+        .easing(TWEEN.Easing.Linear.None)
+        .onUpdate(function() {
+          bumper1.__dirtyPosition = true;
+        })
+        .start();
+
+      // Animacja bumper2
+      new TWEEN.Tween(bumper2.position)
+        .to({ y: targetPositionY + 1 }, duration)
+        .easing(TWEEN.Easing.Linear.None)
+        .onUpdate(function() {
+          bumper2.__dirtyPosition = true;
+        })
+        .start();
+
+      // Animacja bumper3
+      new TWEEN.Tween(bumper3.position)
+        .to({ y: targetPositionY + 1 }, duration)
+        .easing(TWEEN.Easing.Linear.None)
+        .onUpdate(function() {
+          bumper3.__dirtyPosition = true;
+        })
+        .start();
+
+      // Animacja bumper4
+      new TWEEN.Tween(bumper4.position)
+        .to({ y: targetPositionY + 1 }, duration)
+        .easing(TWEEN.Easing.Linear.None)
+        .onUpdate(function() {
+          bumper4.__dirtyPosition = true;
+        })
+        .start();
+    }
+
+    // // Inicjalizacja animacji
+    // var up = true;
+    // setInterval(function() {
+    //   moveContainer(up);
+    //   up = !up; // Zmiana kierunku ruchu przy następnym wywołaniu
+    // }, 100); // Co 2 sekundy
+
+    // Funkcja animacji dla plane2
+    function animatePlane2() {
+      var duration = 100; // Czas trwania animacji w milisekundach
+      var initialPositionY = plane2.position.y;
+      var upPositionY = initialPositionY + 10; // Wysokość, na którą plane2 się podniesie
+
+      var upTween = new TWEEN.Tween(plane2.position)
+        .to({ y: upPositionY }, duration)
+        .easing(TWEEN.Easing.Quadratic.Out)
+        .onUpdate(function() {
+          plane2.__dirtyPosition = true; // Informujemy Physijs o zmianie pozycji
+        });
+
+      var downTween = new TWEEN.Tween(plane2.position)
+        .to({ y: initialPositionY }, duration)
+        .easing(TWEEN.Easing.Quadratic.In)
+        .onUpdate(function() {
+          plane2.__dirtyPosition = true;
+        });
+
+      // Po zakończeniu animacji w górę, zaczynamy animację w dół i odwrotnie
+      upTween.chain(downTween);
+      downTween.chain(upTween);
+
+      // Rozpoczynamy animację
+      upTween.start();
+    }
+
+    // Wywołujemy funkcję animacji
+    animatePlane2();
+
+    render();
+    scene.simulate()
+
+    function render() {
+      for (var i = 5; i < scene.children.length - 5; i++) {
+        var obj = scene.children[i];
+
+        //if (obj.position.y <= -50) {
+        //  scene.remove(obj);
+        //}
+      }
+
+      renderer.render(scene, camera);
+      TWEEN.update();
+      requestAnimationFrame(render);
+    }
+
+    function randomColor() {
+      return Math.random() * 0xffffff;
+    }
+  </script>
+</body>
+</html>
